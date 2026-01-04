@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -14,6 +14,13 @@ interface Profile {
   avatar_url: string | null;
 }
 
+interface OfficerData {
+  employeeId?: string;
+  department?: string;
+  designation?: string;
+  phoneNumber?: string;
+}
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
@@ -21,7 +28,7 @@ interface AuthContextType {
   role: AppRole | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  signUp: (email: string, password: string, fullName?: string, role?: string) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string, fullName?: string, role?: string, officerData?: OfficerData) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -125,19 +132,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  const signUp = async (email: string, password: string, fullName?: string, role?: string) => {
+  const signUp = async (email: string, password: string, fullName?: string, role?: string, officerData?: OfficerData) => {
     try {
       const redirectUrl = `${window.location.origin}/`;
+      
+      const userData: any = {
+        full_name: fullName,
+        role: role || 'citizen',
+      };
+
+      // Add officer-specific data if provided
+      if (role === 'officer' && officerData) {
+        userData.employee_id = officerData.employeeId;
+        userData.department = officerData.department;
+        userData.designation = officerData.designation;
+        userData.phone_number = officerData.phoneNumber;
+      }
       
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
           emailRedirectTo: redirectUrl,
-          data: {
-            full_name: fullName,
-            role: role || 'citizen',
-          },
+          data: userData,
         },
       });
 
@@ -152,14 +169,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // If user is created immediately (no email confirmation required)
       if (data.user && !data.user.email_confirmed_at) {
+        const message = role === 'officer' 
+          ? 'Please check your email and click the confirmation link. Officer accounts require admin approval.'
+          : 'Please check your email and click the confirmation link to complete your registration.';
+        
         toast({
           title: 'Check Your Email',
-          description: 'Please check your email and click the confirmation link to complete your registration.',
+          description: message,
         });
       } else if (data.user) {
+        const message = role === 'officer'
+          ? 'Your officer account has been created and is pending admin approval.'
+          : 'Your account has been created successfully.';
+        
         toast({
           title: 'Account Created',
-          description: 'Your account has been created successfully.',
+          description: message,
         });
       }
 

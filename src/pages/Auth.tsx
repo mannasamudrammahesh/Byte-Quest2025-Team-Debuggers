@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Mail, Lock, User, ArrowLeft, Shield, Users } from 'lucide-react';
+import { Loader2, Mail, Lock, User, ArrowLeft, Shield, Users, Phone, Building, UserCheck } from 'lucide-react';
 import { z } from 'zod';
 
 const loginSchema = z.object({
@@ -23,9 +23,22 @@ const signupSchema = z.object({
   password: z.string().min(6, 'Password must be at least 6 characters'),
   confirmPassword: z.string(),
   role: z.enum(['citizen', 'officer'], { required_error: 'Please select a role' }),
+  // Officer-specific fields
+  employeeId: z.string().optional(),
+  department: z.string().optional(),
+  designation: z.string().optional(),
+  phoneNumber: z.string().optional(),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
   path: ['confirmPassword'],
+}).refine((data) => {
+  if (data.role === 'officer') {
+    return data.employeeId && data.department && data.designation && data.phoneNumber;
+  }
+  return true;
+}, {
+  message: "All officer fields are required for government officers",
+  path: ['employeeId'],
 });
 
 export default function Auth() {
@@ -47,6 +60,11 @@ export default function Auth() {
     password: '',
     confirmPassword: '',
     role: 'citizen' as 'citizen' | 'officer',
+    // Officer-specific fields
+    employeeId: '',
+    department: '',
+    designation: '',
+    phoneNumber: '',
   });
 
   // Redirect if already authenticated
@@ -101,7 +119,18 @@ export default function Auth() {
       const validated = signupSchema.parse(signupForm);
       setIsLoading(true);
 
-      const { error } = await signUp(validated.email, validated.password, validated.fullName, validated.role);
+      const { error } = await signUp(
+        validated.email, 
+        validated.password, 
+        validated.fullName, 
+        validated.role,
+        {
+          employeeId: validated.employeeId,
+          department: validated.department,
+          designation: validated.designation,
+          phoneNumber: validated.phoneNumber,
+        }
+      );
       
       if (error) {
         setErrors({ form: error.message });
@@ -285,6 +314,93 @@ export default function Auth() {
                       </div>
                       {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
                     </div>
+
+                    {/* Officer-specific fields */}
+                    {signupForm.role === 'officer' && (
+                      <>
+                        <div className="space-y-2">
+                          <Label htmlFor="employee-id">Employee ID *</Label>
+                          <div className="relative">
+                            <UserCheck className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input
+                              id="employee-id"
+                              type="text"
+                              placeholder="EMP001234"
+                              className="pl-10"
+                              value={signupForm.employeeId}
+                              onChange={(e) => setSignupForm({ ...signupForm, employeeId: e.target.value })}
+                            />
+                          </div>
+                          {errors.employeeId && <p className="text-sm text-destructive">{errors.employeeId}</p>}
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="department">Department *</Label>
+                          <div className="relative">
+                            <Building className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
+                            <Select
+                              value={signupForm.department}
+                              onValueChange={(value) => setSignupForm({ ...signupForm, department: value })}
+                            >
+                              <SelectTrigger className="pl-10">
+                                <SelectValue placeholder="Select your department" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="public_works">Public Works Department</SelectItem>
+                                <SelectItem value="sanitation">Sanitation Department</SelectItem>
+                                <SelectItem value="utilities">Utilities Department</SelectItem>
+                                <SelectItem value="police">Police Department</SelectItem>
+                                <SelectItem value="health">Health Department</SelectItem>
+                                <SelectItem value="education">Education Department</SelectItem>
+                                <SelectItem value="administration">General Administration</SelectItem>
+                                <SelectItem value="revenue">Revenue Department</SelectItem>
+                                <SelectItem value="transport">Transport Department</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          {errors.department && <p className="text-sm text-destructive">{errors.department}</p>}
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="designation">Designation *</Label>
+                          <div className="relative">
+                            <Shield className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input
+                              id="designation"
+                              type="text"
+                              placeholder="Assistant Engineer, Inspector, etc."
+                              className="pl-10"
+                              value={signupForm.designation}
+                              onChange={(e) => setSignupForm({ ...signupForm, designation: e.target.value })}
+                            />
+                          </div>
+                          {errors.designation && <p className="text-sm text-destructive">{errors.designation}</p>}
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="phone-number">Official Phone Number *</Label>
+                          <div className="relative">
+                            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input
+                              id="phone-number"
+                              type="tel"
+                              placeholder="+91 9876543210"
+                              className="pl-10"
+                              value={signupForm.phoneNumber}
+                              onChange={(e) => setSignupForm({ ...signupForm, phoneNumber: e.target.value })}
+                            />
+                          </div>
+                          {errors.phoneNumber && <p className="text-sm text-destructive">{errors.phoneNumber}</p>}
+                        </div>
+
+                        <div className="p-3 rounded-lg bg-blue-50 border border-blue-200">
+                          <p className="text-sm text-blue-800">
+                            <strong>Note:</strong> Government officer accounts require verification. 
+                            Your account will be reviewed by administrators before activation.
+                          </p>
+                        </div>
+                      </>
+                    )}
 
                     <div className="space-y-2">
                       <Label htmlFor="signup-password">{t('auth.password')}</Label>

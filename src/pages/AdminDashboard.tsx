@@ -48,6 +48,18 @@ interface User {
   role: AppRole;
 }
 
+interface PendingOfficer {
+  id: string;
+  full_name: string;
+  email: string;
+  employee_id: string;
+  department: string;
+  designation: string;
+  phone_number: string;
+  created_at: string;
+  verification_status: string;
+}
+
 interface GrievanceStats {
   total: number;
   pending: number;
@@ -63,6 +75,7 @@ export default function AdminDashboard() {
   const { toast } = useToast();
 
   const [users, setUsers] = useState<User[]>([]);
+  const [pendingOfficers, setPendingOfficers] = useState<PendingOfficer[]>([]);
   const [stats, setStats] = useState<GrievanceStats>({
     total: 0,
     pending: 0,
@@ -76,10 +89,12 @@ export default function AdminDashboard() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [newRole, setNewRole] = useState<AppRole>('citizen');
   const [isUpdating, setIsUpdating] = useState(false);
+  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'officers'>('overview');
 
   useEffect(() => {
     fetchUsers();
     fetchStats();
+    fetchPendingOfficers();
   }, []);
 
   const fetchUsers = async () => {
@@ -177,6 +192,64 @@ export default function AdminDashboard() {
       });
     } finally {
       setIsUpdating(false);
+    }
+  };
+
+  const fetchPendingOfficers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select(`
+          id,
+          full_name,
+          email,
+          employee_id,
+          department,
+          designation,
+          phone_number,
+          created_at,
+          verification_status
+        `)
+        .eq('verification_status', 'pending')
+        .not('employee_id', 'is', null)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      setPendingOfficers(data || []);
+    } catch (err) {
+      console.error('Error fetching pending officers:', err);
+      toast({
+        title: 'Error',
+        description: 'Failed to fetch pending officers. Please try again.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const verifyOfficer = async (officerId: string, approved: boolean) => {
+    try {
+      const { error } = await supabase.rpc('verify_officer', {
+        officer_id: officerId,
+        verified: approved
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: approved ? 'Officer Approved' : 'Officer Rejected',
+        description: `Officer has been ${approved ? 'approved' : 'rejected'} successfully.`,
+      });
+
+      await fetchPendingOfficers();
+      await fetchUsers();
+    } catch (err) {
+      console.error('Error verifying officer:', err);
+      toast({
+        title: 'Verification Failed',
+        description: 'Failed to verify officer. Please try again.',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -346,6 +419,70 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Pending Officer Verifications */}
+        {pendingOfficers.length > 0 && (
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <UserCheck className="h-5 w-5" />
+                Pending Officer Verifications
+                <Badge variant="destructive">{pendingOfficers.length}</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {pendingOfficers.map((officer) => (
+                  <div key={officer.id} className="flex items-center justify-between p-4 border rounded-lg bg-yellow-50 border-yellow-200">
+                    <div className="flex items-center gap-4">
+                      <div className="p-2 rounded-lg bg-yellow-100 text-yellow-600">
+                        <Shield className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <h4 className="font-semibold">{officer.full_name}</h4>
+                        <p className="text-sm text-muted-foreground">{officer.email}</p>
+                        <div className="grid grid-cols-2 gap-4 mt-2 text-xs">
+                          <div>
+                            <span className="font-medium">Employee ID:</span> {officer.employee_id}
+                          </div>
+                          <div>
+                            <span className="font-medium">Department:</span> {officer.department}
+                          </div>
+                          <div>
+                            <span className="font-medium">Designation:</span> {officer.designation}
+                          </div>
+                          <div>
+                            <span className="font-medium">Phone:</span> {officer.phone_number}
+                          </div>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Applied {new Date(officer.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => verifyOfficer(officer.id, true)}
+                        className="bg-green-600 hover:bg-green-700"
+                      >
+                        <UserCheck className="h-4 w-4 mr-1" />
+                        Approve
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => verifyOfficer(officer.id, false)}
+                      >
+                        Reject
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* User Management */}
         <Card>

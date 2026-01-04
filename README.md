@@ -1,73 +1,154 @@
-# Welcome to your Lovable project
+# GrievAI - Government Grievance Redressal System
 
-## Project info
+## About GrievAI
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+GrievAI is an AI-powered government grievance redressal system designed to streamline citizen service delivery and improve government responsiveness. Built for the Byte Quest 2025 hackathon by Team Debuggers.
 
-## How can I edit this code?
+## Features
 
-There are several ways of editing your application.
+- **AI-Powered Analysis**: Automatic categorization and prioritization of grievances
+- **Multi-Modal Input**: Text, voice, image, and location-based grievance submission
+- **Real-Time Tracking**: Citizens can track their grievance status in real-time
+- **Role-Based Access**: Separate dashboards for citizens, officers, and administrators
+- **Location Services**: Accurate location capture and mapping using LocationIQ
+- **Multi-Language Support**: Internationalization support for multiple languages
+- **Responsive Design**: Works seamlessly across desktop and mobile devices
 
-**Use Lovable**
+## Technology Stack
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+- **Frontend**: React 18 with TypeScript
+- **Styling**: Tailwind CSS with shadcn/ui components
+- **Backend**: Supabase (PostgreSQL + Edge Functions)
+- **AI Integration**: Lovable AI Gateway for grievance analysis
+- **Location Services**: LocationIQ API with OpenStreetMap fallback
+- **Build Tool**: Vite
+- **Authentication**: Supabase Auth with role-based access control
 
-Changes made via Lovable will be committed automatically to this repo.
+## Getting Started
 
-**Use your preferred IDE**
+### Prerequisites
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+- Node.js 18+ and npm
+- Supabase account
+- LocationIQ API key (optional, has fallback)
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+### Installation
 
-Follow these steps:
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd Byte-Quest2025-Team-Debuggers
+```
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+2. Install dependencies:
+```bash
+npm install
+```
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+3. Set up environment variables:
+```bash
+# Copy the example environment file
+cp .env.example .env
 
-# Step 3: Install the necessary dependencies.
-npm i
+# Edit .env with your configuration
+VITE_SUPABASE_URL=your_supabase_url
+VITE_SUPABASE_PUBLISHABLE_KEY=your_supabase_anon_key
+VITE_LOCATIONIQ_API_KEY=your_locationiq_key
+```
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+4. Set up Supabase:
+```bash
+# Install Supabase CLI
+npm install -g supabase
+
+# Login to Supabase
+supabase login
+
+# Link to your project
+supabase link --project-ref your-project-ref
+
+# Push database migrations
+supabase db push
+
+# Deploy edge functions
+supabase functions deploy analyze-grievance
+```
+
+5. Start the development server:
+```bash
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+## User Roles
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+### Citizens
+- Submit grievances through multiple input methods
+- Track grievance status and updates
+- View resolution history
+- Receive notifications on status changes
 
-**Use GitHub Codespaces**
+### Government Officers
+- View assigned grievances by department
+- Update grievance status and add comments
+- Access detailed analytics and reports
+- Manage workload and priorities
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+### Administrators
+- Oversee entire system operations
+- Manage user roles and permissions
+- Access comprehensive analytics
+- Configure system settings
 
-## What technologies are used for this project?
+## API Configuration
 
-This project is built with:
+### Supabase Edge Functions
+Configure the following environment variables in your Supabase project:
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+```env
+LOVABLE_API_KEY=your_lovable_api_key
+OPENCAGE_API_KEY=your_opencage_key (optional)
+```
 
-## How can I deploy this project?
+### LocationIQ Integration
+Get your API key from [LocationIQ](https://locationiq.com/) and add it to your `.env` file.
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+## Deployment
 
-## Can I connect a custom domain to my Lovable project?
+The application can be deployed to any static hosting service:
 
-Yes, you can!
+### Vercel
+```bash
+npm run build
+# Deploy to Vercel
+```
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+### Netlify
+```bash
+npm run build
+# Deploy dist/ folder to Netlify
+```
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+### Supabase Hosting
+```bash
+supabase hosting deploy
+```
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## Team Debuggers
+
+This project was developed by Team Debuggers for Byte Quest 2025.
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Support
+
+For support and questions, please open an issue in the GitHub repository.
