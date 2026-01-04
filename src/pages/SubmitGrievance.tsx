@@ -4,10 +4,11 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { AddressInput } from '@/components/ui/AddressInput';
 import {
   Select,
   SelectContent,
@@ -17,6 +18,7 @@ import {
 } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { locationService } from '@/lib/locationService';
 import {
   FileText,
   Mic,
@@ -27,6 +29,7 @@ import {
   Loader2,
   CheckCircle,
   Brain,
+  Navigation,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -39,6 +42,7 @@ interface AIAnalysis {
   department: string;
   confidence: number;
   summary: string;
+  fallback?: boolean;
 }
 
 export default function SubmitGrievance() {
@@ -51,6 +55,7 @@ export default function SubmitGrievance() {
   const [inputMode, setInputMode] = useState<InputMode>('text');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCapturingLocation, setIsCapturingLocation] = useState(false);
   const [trackingId, setTrackingId] = useState<string | null>(null);
 
   // Form data
@@ -104,41 +109,125 @@ export default function SubmitGrievance() {
     setStep(2);
 
     try {
-      // Call AI analysis edge function
+      // First try the Supabase edge function
+      const { data: { session } } = await supabase.auth.getSession();
       const response = await supabase.functions.invoke('analyze-grievance', {
         body: {
           description: formData.description,
           title: formData.title,
           input_mode: inputMode,
+          location_address: formData.location_address,
+        },
+        headers: {
+          Authorization: `Bearer ${session?.access_token || ''}`,
         },
       });
 
-      if (response.error) throw response.error;
+      if (response.error) {
+        console.warn('Supabase function error:', response.error);
+        throw new Error('Supabase function failed');
+      }
 
       const analysis = response.data as AIAnalysis;
-      setAiAnalysis(analysis);
+      if (analysis && analysis.category && analysis.priority) {
+        setAiAnalysis(analysis);
 
-      // Auto-fill form with AI suggestions
+        // Auto-fill form with AI suggestions
+        setFormData((prev) => ({
+          ...prev,
+          category: analysis.category || prev.category,
+          priority: analysis.priority || prev.priority,
+          title: prev.title || analysis.summary?.substring(0, 100) || prev.title,
+        }));
+
+        setStep(3);
+        return;
+      }
+      throw new Error('Invalid analysis response');
+    } catch (err) {
+      console.warn('AI analysis failed, using local fallback:', err);
+      
+      // Use local intelligent analysis as fallback
+      const localAnalysis = performLocalAnalysis(formData.description, formData.title, formData.location_address);
+      setAiAnalysis(localAnalysis);
+
+      // Auto-fill form with local analysis
       setFormData((prev) => ({
         ...prev,
-        category: analysis.category || prev.category,
-        priority: analysis.priority || prev.priority,
-        title: prev.title || analysis.summary?.substring(0, 100) || prev.title,
+        category: localAnalysis.category || prev.category,
+        priority: localAnalysis.priority || prev.priority,
+        title: prev.title || localAnalysis.summary?.substring(0, 100) || prev.title,
       }));
 
-      setStep(3);
-    } catch (err) {
-      console.error('AI analysis error:', err);
-      // Fallback: Skip AI analysis and go to manual entry
       toast({
-        title: 'AI Analysis Unavailable',
-        description: 'Please fill in the details manually.',
-        variant: 'destructive',
+        title: 'Analysis Complete',
+        description: 'Using local analysis. You can review and modify the suggestions.',
       });
+
       setStep(3);
     } finally {
       setIsAnalyzing(false);
     }
+  };
+
+  // Local analysis function that works without external APIs
+  const performLocalAnalysis = (description: string, title: string, location: string): AIAnalysis => {
+    const text = `${title} ${description} ${location}`.toLowerCase();
+    
+    let category = 'administration';
+    let department = 'General Administration';
+    let priority = 'medium';
+    let confidence = 0.7;
+    
+    // Enhanced keyword-based category detection
+    if (text.match(/\b(road|street|bridge|pothole|construction|infrastructure|pavement|sidewalk|traffic|signal)\b/)) {
+      category = 'civic_infrastructure';
+      department = 'Public Works Department';
+      confidence = 0.8;
+    } else if (text.match(/\b(garbage|waste|trash|cleaning|sanitation|toilet|drain|sewer|dump)\b/)) {
+      category = 'sanitation';
+      department = 'Sanitation Department';
+      confidence = 0.8;
+    } else if (text.match(/\b(water|electricity|power|gas|utility|outage|supply|connection|meter)\b/)) {
+      category = 'utilities';
+      department = 'Utilities Department';
+      confidence = 0.8;
+    } else if (text.match(/\b(police|safety|crime|theft|violence|emergency|fire|accident|security)\b/)) {
+      category = 'public_safety';
+      department = 'Police Department';
+      confidence = 0.8;
+    } else if (text.match(/\b(hospital|health|medical|doctor|medicine|clinic|ambulance|disease)\b/)) {
+      category = 'healthcare';
+      department = 'Health Department';
+      confidence = 0.8;
+    } else if (text.match(/\b(school|education|teacher|student|college|university|exam|admission)\b/)) {
+      category = 'education';
+      department = 'Education Department';
+      confidence = 0.8;
+    }
+    
+    // Enhanced priority detection
+    if (text.match(/\b(emergency|urgent|critical|danger|life|death|accident|fire|flood|blocked|broken)\b/)) {
+      priority = 'critical';
+      confidence = Math.min(confidence + 0.1, 1.0);
+    } else if (text.match(/\b(important|serious|major|outage|problem|issue|complaint|broken|damaged)\b/)) {
+      priority = 'high';
+    } else if (text.match(/\b(minor|small|suggestion|improve|request|slow|delay)\b/)) {
+      priority = 'low';
+    }
+    
+    // Generate summary
+    const categoryName = category.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+    const summary = `${categoryName} issue requiring ${priority} priority attention from ${department}`;
+    
+    return {
+      category,
+      priority,
+      department,
+      confidence,
+      summary,
+      fallback: true
+    };
   };
 
   const handleSubmit = async () => {
@@ -194,29 +283,74 @@ export default function SubmitGrievance() {
     }
   };
 
-  const handleGetLocation = () => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setFormData((prev) => ({
-            ...prev,
-            location_lat: position.coords.latitude,
-            location_lng: position.coords.longitude,
-          }));
-          toast({
-            title: 'Location Captured',
-            description: 'Your current location has been added.',
-          });
-        },
-        (error) => {
-          toast({
-            title: 'Location Error',
-            description: 'Unable to get your location. Please enter it manually.',
-            variant: 'destructive',
-          });
-        }
-      );
+  const handleGetLocation = async () => {
+    setIsCapturingLocation(true);
+    
+    try {
+      toast({
+        title: 'Getting Location',
+        description: 'Please allow location access and wait...',
+      });
+
+      // Use enhanced LocationIQ service
+      const locationData = await locationService.getLocationWithAddress();
+      
+      setFormData((prev) => ({
+        ...prev,
+        location_lat: locationData.coordinates.lat,
+        location_lng: locationData.coordinates.lng,
+        location_address: locationData.address,
+      }));
+
+      toast({
+        title: 'Location Captured Successfully',
+        description: `Address: ${locationData.address.length > 80 ? locationData.address.substring(0, 80) + '...' : locationData.address}`,
+      });
+
+    } catch (error) {
+      console.error('Location capture failed:', error);
+      
+      // Fallback to basic GPS + OpenStreetMap
+      try {
+        const coordinates = await locationService.getCurrentPosition();
+        const fallbackAddress = await locationService.fallbackReverseGeocode(
+          coordinates.lat, 
+          coordinates.lng
+        );
+        
+        setFormData((prev) => ({
+          ...prev,
+          location_lat: coordinates.lat,
+          location_lng: coordinates.lng,
+          location_address: fallbackAddress,
+        }));
+
+        toast({
+          title: 'Location Captured',
+          description: 'GPS coordinates captured. Address lookup used fallback service.',
+        });
+
+      } catch (fallbackError) {
+        console.error('Fallback location failed:', fallbackError);
+        
+        toast({
+          title: 'Location Error',
+          description: error instanceof Error ? error.message : 'Unable to get your location. Please enter it manually.',
+          variant: 'destructive',
+        });
+      }
+    } finally {
+      setIsCapturingLocation(false);
     }
+  };
+
+  const handleAddressChange = (address: string, coordinates?: { lat: number; lng: number }) => {
+    setFormData((prev) => ({
+      ...prev,
+      location_address: address,
+      location_lat: coordinates?.lat || prev.location_lat,
+      location_lng: coordinates?.lng || prev.location_lng,
+    }));
   };
 
   const renderStep = () => {
@@ -285,21 +419,20 @@ export default function SubmitGrievance() {
                 </div>
                 <div className="space-y-2">
                   <Label>{t('grievance.location')}</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Enter address or location"
-                      value={formData.location_address}
-                      onChange={(e) => setFormData({ ...formData, location_address: e.target.value })}
-                      className="flex-1"
-                    />
-                    <Button type="button" variant="outline" onClick={handleGetLocation}>
-                      <MapPin className="h-4 w-4" />
-                    </Button>
-                  </div>
+                  <AddressInput
+                    value={formData.location_address}
+                    onChange={handleAddressChange}
+                    onLocationCapture={handleGetLocation}
+                    placeholder="Enter address or location"
+                    isCapturingLocation={isCapturingLocation}
+                  />
                   {formData.location_lat && (
-                    <p className="text-xs text-muted-foreground">
-                      📍 Location captured: {formData.location_lat.toFixed(4)}, {formData.location_lng?.toFixed(4)}
-                    </p>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Navigation className="h-3 w-3" />
+                      <span>
+                        GPS: {formData.location_lat.toFixed(6)}, {formData.location_lng?.toFixed(6)}
+                      </span>
+                    </div>
                   )}
                 </div>
               </div>
@@ -324,16 +457,64 @@ export default function SubmitGrievance() {
             )}
 
             {inputMode === 'location' && (
-              <div className="text-center py-8">
-                <Button onClick={handleGetLocation} className="gap-2">
-                  <MapPin className="h-4 w-4" />
-                  Capture Current Location
-                </Button>
-                {formData.location_lat && (
-                  <p className="text-sm text-muted-foreground mt-4">
-                    📍 Location: {formData.location_lat.toFixed(4)}, {formData.location_lng?.toFixed(4)}
+              <div className="space-y-6">
+                <div className="text-center">
+                  <div className="inline-flex p-4 rounded-full bg-primary/10 text-primary mb-4">
+                    <MapPin className="h-8 w-8" />
+                  </div>
+                  <h3 className="font-semibold text-lg mb-2">Capture Your Location</h3>
+                  <p className="text-muted-foreground text-sm mb-6">
+                    Get your current location or search for a specific address
                   </p>
-                )}
+                </div>
+
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Location Address</Label>
+                    <AddressInput
+                      value={formData.location_address}
+                      onChange={handleAddressChange}
+                      onLocationCapture={handleGetLocation}
+                      placeholder="Search for address or click GPS button"
+                      isCapturingLocation={isCapturingLocation}
+                    />
+                  </div>
+
+                  {formData.location_lat && (
+                    <div className="p-4 rounded-lg bg-muted/50 border">
+                      <div className="flex items-center gap-2 text-sm font-medium mb-2">
+                        <Navigation className="h-4 w-4 text-green-600" />
+                        Location Captured
+                      </div>
+                      <p className="text-sm text-muted-foreground mb-2">
+                        {formData.location_address}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Coordinates: {formData.location_lat.toFixed(6)}, {formData.location_lng?.toFixed(6)}
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="flex gap-3">
+                    <Button 
+                      onClick={handleGetLocation} 
+                      disabled={isCapturingLocation}
+                      className="flex-1"
+                    >
+                      {isCapturingLocation ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Getting Location...
+                        </>
+                      ) : (
+                        <>
+                          <Navigation className="h-4 w-4 mr-2" />
+                          Use Current Location
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -367,11 +548,28 @@ export default function SubmitGrievance() {
                   <div className="flex items-center gap-2 text-accent mb-2">
                     <Brain className="h-4 w-4" />
                     <span className="font-medium">AI Analysis</span>
+                    {aiAnalysis.fallback && (
+                      <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
+                        Fallback Analysis
+                      </span>
+                    )}
                   </div>
-                  <p className="text-sm text-muted-foreground">{aiAnalysis.summary}</p>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Confidence: {(aiAnalysis.confidence * 100).toFixed(0)}%
-                  </p>
+                  <p className="text-sm text-muted-foreground mb-2">{aiAnalysis.summary}</p>
+                  <div className="grid grid-cols-2 gap-4 text-xs">
+                    <div>
+                      <span className="font-medium">Department:</span>
+                      <p className="text-muted-foreground">{aiAnalysis.department}</p>
+                    </div>
+                    <div>
+                      <span className="font-medium">Confidence:</span>
+                      <p className="text-muted-foreground">{(aiAnalysis.confidence * 100).toFixed(0)}%</p>
+                    </div>
+                  </div>
+                  {aiAnalysis.confidence < 0.7 && (
+                    <p className="text-xs text-yellow-600 mt-2">
+                      ⚠️ Low confidence - please review the suggested category and priority
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -434,13 +632,18 @@ export default function SubmitGrievance() {
               {formData.location_address && (
                 <div className="space-y-2">
                   <Label>{t('grievance.location')}</Label>
-                  <div className="p-3 rounded-lg bg-muted text-sm">
-                    {formData.location_address}
-                    {formData.location_lat && (
-                      <span className="text-muted-foreground ml-2">
-                        ({formData.location_lat.toFixed(4)}, {formData.location_lng?.toFixed(4)})
-                      </span>
-                    )}
+                  <div className="p-3 rounded-lg bg-muted">
+                    <div className="flex items-start gap-2">
+                      <MapPin className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                      <div className="flex-1">
+                        <p className="text-sm">{formData.location_address}</p>
+                        {formData.location_lat && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            GPS: {formData.location_lat.toFixed(6)}, {formData.location_lng?.toFixed(6)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}

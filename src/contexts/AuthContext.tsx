@@ -21,7 +21,7 @@ interface AuthContextType {
   role: AppRole | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  signUp: (email: string, password: string, fullName?: string) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string, fullName?: string, role?: string) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -125,17 +125,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  const signUp = async (email: string, password: string, fullName?: string) => {
+  const signUp = async (email: string, password: string, fullName?: string, role?: string) => {
     try {
       const redirectUrl = `${window.location.origin}/`;
       
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
           emailRedirectTo: redirectUrl,
           data: {
             full_name: fullName,
+            role: role || 'citizen',
           },
         },
       });
@@ -149,10 +150,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error };
       }
 
-      toast({
-        title: 'Account Created',
-        description: 'Your account has been created successfully.',
-      });
+      // If user is created immediately (no email confirmation required)
+      if (data.user && !data.user.email_confirmed_at) {
+        toast({
+          title: 'Check Your Email',
+          description: 'Please check your email and click the confirmation link to complete your registration.',
+        });
+      } else if (data.user) {
+        toast({
+          title: 'Account Created',
+          description: 'Your account has been created successfully.',
+        });
+      }
 
       return { error: null };
     } catch (err) {

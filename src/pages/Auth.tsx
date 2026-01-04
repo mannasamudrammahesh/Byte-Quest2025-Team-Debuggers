@@ -8,7 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, Mail, Lock, User, ArrowLeft } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Loader2, Mail, Lock, User, ArrowLeft, Shield, Users } from 'lucide-react';
 import { z } from 'zod';
 
 const loginSchema = z.object({
@@ -21,6 +22,7 @@ const signupSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
   confirmPassword: z.string(),
+  role: z.enum(['citizen', 'officer'], { required_error: 'Please select a role' }),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
   path: ['confirmPassword'],
@@ -44,6 +46,7 @@ export default function Auth() {
     email: '',
     password: '',
     confirmPassword: '',
+    role: 'citizen' as 'citizen' | 'officer',
   });
 
   // Redirect if already authenticated
@@ -98,7 +101,7 @@ export default function Auth() {
       const validated = signupSchema.parse(signupForm);
       setIsLoading(true);
 
-      const { error } = await signUp(validated.email, validated.password, validated.fullName);
+      const { error } = await signUp(validated.email, validated.password, validated.fullName, validated.role);
       
       if (error) {
         setErrors({ form: error.message });
@@ -232,6 +235,39 @@ export default function Auth() {
                         />
                       </div>
                       {errors.fullName && <p className="text-sm text-destructive">{errors.fullName}</p>}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="signup-role">Account Type</Label>
+                      <Select
+                        value={signupForm.role}
+                        onValueChange={(value) => setSignupForm({ ...signupForm, role: value as 'citizen' | 'officer' })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select your role" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="citizen">
+                            <div className="flex items-center gap-2">
+                              <Users className="h-4 w-4" />
+                              <div>
+                                <p className="font-medium">Citizen</p>
+                                <p className="text-xs text-muted-foreground">Submit and track grievances</p>
+                              </div>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="officer">
+                            <div className="flex items-center gap-2">
+                              <Shield className="h-4 w-4" />
+                              <div>
+                                <p className="font-medium">Government Officer</p>
+                                <p className="text-xs text-muted-foreground">Manage and resolve grievances</p>
+                              </div>
+                            </div>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {errors.role && <p className="text-sm text-destructive">{errors.role}</p>}
                     </div>
 
                     <div className="space-y-2">
